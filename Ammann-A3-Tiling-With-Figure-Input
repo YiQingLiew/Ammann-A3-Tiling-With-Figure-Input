@@ -1,0 +1,548 @@
+import javax.imageio.ImageIO;
+import javax.swing.*;
+import java.awt.*;
+import java.awt.geom.AffineTransform;
+import java.awt.geom.Path2D;
+import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.Scanner;
+
+import static java.lang.Math.*;
+import static java.util.stream.Collectors.toList;
+
+
+public  class test extends JPanel {
+
+    // ignores missing hash code
+    class Tile {
+        double x, y, angle, size;
+        Type type;
+
+        Tile(Type t, double x, double y, double a, double s) {
+            type = t;
+            this.x = x;
+            this.y = y;
+            angle = a;
+            size = s;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (o instanceof Tile) {
+                Tile t = (Tile) o;
+                return type == t.type && x == t.x && y == t.y && angle == t.angle;
+            }
+            return false;
+        }
+    }
+
+    enum Type {
+        A, B, C
+    }
+
+    static final double G = (1 + sqrt(5)) / 2; // golden ratio
+    static final double T = toRadians(36); // theta
+
+    List<Tile> tiles = new ArrayList<>();
+    private double scale = 0.35;
+    private static JPanel zoomPanel;
+
+    public test() {
+        int w = 700, h = 450;
+        setPreferredSize(new Dimension(w, h));
+        setBackground(Color.white);
+
+        // Create zoom in/out buttons panel
+        zoomPanel = new JPanel();
+
+        JButton zoomInButton = new JButton("Zoom In");
+        zoomInButton.addActionListener(e -> {
+            scale += 0.1;
+            repaint();
+        });
+        JButton zoomOutButton = new JButton("Zoom Out");
+        zoomOutButton.addActionListener(e -> {
+            if (scale > 0.1) {
+                scale -= 0.1;
+                repaint();
+            }
+        });
+        zoomPanel.add(zoomInButton);
+        zoomPanel.add(zoomOutButton);
+
+        Scanner scanner = new Scanner(System.in);
+        int Gen;
+        while (true) {
+            System.out.println("Enter a non-negative integer for generation:");
+            if (scanner.hasNextInt()) {
+                Gen = scanner.nextInt();
+                if (Gen >= 0) {
+                    break;
+                }
+            }
+            System.out.println("Invalid input. Please try again.");
+            scanner.nextLine();
+        }
+
+        tiles = deflateTiles(setupPrototiles(w, h), Gen);
+
+    }
+
+    List<Tile> setupPrototiles(int w, int h) {
+        List<Tile> proto = new ArrayList<>();
+
+        Scanner scanner = new Scanner(System.in);
+
+        Type type = null;
+        while (type == null) {
+            System.out.println("Choose the starting tile to be A, B or C:");
+            String input = scanner.nextLine().toUpperCase();
+            try {
+                type = Type.valueOf(input);
+            } catch (IllegalArgumentException e) {
+                System.out.println("Invalid input. Please try again.");
+            }
+        }
+
+        double angleRadians = 0.0;
+        while (true) {
+            System.out.println("Enter the angle (in degrees) of the starting tile where sin(angle) = 0 or cos(angle) = 0:");
+            String input = scanner.nextLine();
+            try {
+                double angleDegrees = Double.parseDouble(input);
+                double sin = Math.sin(Math.toRadians(angleDegrees));
+                double cos = Math.cos(Math.toRadians(angleDegrees));
+                if (Math.round(sin) == 0 || Math.round(cos) == 0) {
+                    angleRadians = Math.toRadians(angleDegrees);
+                    break;
+                } else {
+                    System.out.println("Invalid input. Please try again.");
+                }
+            } catch (NumberFormatException e) {
+                System.out.println("Invalid input. Please try again");
+            }
+        }
+
+        proto.add(new Tile(type, w / 2, h / 2, angleRadians, w / 2.5));
+        return proto;
+    }
+
+
+    List<Tile> deflateTiles(List<Tile> tls, int generation) {
+        if (generation <= 0)
+            return tls;
+            //tls = old list of tiles
+        List<Tile> next = new ArrayList<>(); //next= new list of tiles
+
+        for (Tile tile : tls) {
+            double x = tile.x, y = tile.y, a = tile.angle, nx, ny; //nx ny = new x new y
+            double size = tile.size / G;
+
+            if (tile.type == Type.A) {
+
+                next.add(new Tile(Type.B, x, y, a, size));
+                if (Math.round(Math.sin(a)) == 0) {
+
+                    nx = x + (2 * G + 1) * cos(a) * tile.size;
+                    ny = y ;
+                    next.add(new Tile(Type.A, nx, ny, a + PI / 2, size));
+
+                }
+
+                else if (Math.round(Math.cos(a)) == 0) {
+
+                    nx = x ;
+                    ny = y - (2 * G + 1) * sin(a) * tile.size;
+                    next.add(new Tile(Type.A, nx, ny, a + PI / 2, size));
+
+                }
+            }
+
+            else if (tile.type == Type.B) {
+                if (Math.round(Math.sin(a)) == 0) {
+
+                    nx = x + (G + 1) * cos(a) * tile.size;
+                    ny = y ;
+                    next.add(new Tile(Type.A, nx, ny, a, size));
+
+                    nx = x + (2 * G + 1) * cos(a) * tile.size;
+                    ny = y - G * sin(a + PI / 2) * tile.size;
+                    next.add(new Tile(Type.A, nx, ny, a + PI / 2, size));
+
+                    nx = x ;
+                    ny = y - Math.pow(G, 2) * sin(a + PI / 2) * tile.size;
+                    next.add(new Tile(Type.A, nx, ny, a + 3 * PI / 2, size));
+
+                    nx = x + (1 + Math.pow(G, -1) + G) * cos(a) * tile.size;
+                    ny = y - Math.pow(G, 2) * sin(a + PI / 2) * tile.size;
+                    next.add(new Tile(Type.C, nx, ny, a + PI, size));
+
+                }
+
+
+                else if (Math.round(Math.cos(a)) == 0) {
+
+                    nx = x ;
+                    ny = y - (G + 1) * sin(a) * tile.size;
+                    next.add(new Tile(Type.A, nx, ny, a, size));
+
+                    nx = x + G * cos(a + PI / 2) * tile.size;
+                    ny = y - (2 * G + 1) * sin(a) * tile.size;
+                    next.add(new Tile(Type.A, nx, ny, a + PI / 2, size));
+
+                    nx = x + Math.pow(G, 2) * cos(a + PI / 2) * tile.size;
+                    ny = y ;
+                    next.add(new Tile(Type.A, nx, ny, a + 3 * PI / 2, size));
+
+                    nx = x + Math.pow(G, 2) * cos(a + PI / 2) * tile.size;
+                    ny = y - (1 + Math.pow(G, -1) + G) * sin(a) * tile.size;
+                    next.add(new Tile(Type.C, nx, ny, a + PI, size));
+
+                }
+            }
+
+            else if (tile.type == Type.C) {
+                if (Math.round(Math.sin(a)) == 0) {
+
+                    nx = x + cos(a) * tile.size;
+                    ny = y ;
+                    next.add(new Tile(Type.A, nx, ny, a, size));
+
+                    nx = x + (1 + G) * cos(a) * tile.size;
+                    ny = y - G * sin(a + PI / 2) * tile.size;
+                    next.add(new Tile(Type.A, nx, ny, a + PI / 2, size));
+
+                    nx = x + (1 + Math.pow(G,-1)) * cos(a) * tile.size;
+                    ny = y - (G + 1) * sin(a + PI / 2) * tile.size;
+                    next.add(new Tile(Type.C, nx, ny, a + PI, size));
+
+                }
+
+
+                else if (Math.round(Math.cos(a)) == 0) {
+
+                    nx = x ;
+                    ny = y - sin(a) * tile.size;
+                    next.add(new Tile(Type.A, nx, ny, a, size));
+
+                    nx = x + G * cos(a + PI / 2) * tile.size;
+                    ny = y - (1 + G) * sin(a) * tile.size;
+                    next.add(new Tile(Type.A, nx, ny, a + PI / 2, size));
+
+                    nx = x + (G + 1) * cos(a + PI / 2) * tile.size;
+                    ny = y - (1 + Math.pow(G,-1)) * sin(a) * tile.size;
+                    next.add(new Tile(Type.C, nx, ny, a + PI, size));
+
+                }
+            }
+
+        }
+        // remove duplicates
+        tls = next.stream().distinct().collect(toList());
+        //old tiles make it new tiles
+        return deflateTiles(tls, generation - 1);
+    }
+
+    void drawTiles(Graphics2D g) {
+        BufferedImage BIA=new BufferedImage(1,1,1);
+        BufferedImage BIB=new BufferedImage(1,1,1);
+        BufferedImage BIC=new BufferedImage(1,1,1);
+        try {
+            BIA = ImageIO.read(Objects.requireNonNull(this.getClass().getResource("A.png")));
+            BIB = ImageIO.read(Objects.requireNonNull(this.getClass().getResource("B.png")));
+            BIC = ImageIO.read(Objects.requireNonNull(this.getClass().getResource("C.png")));
+        } catch (IOException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+        }
+
+        for (Tile tile : tiles) {
+            double angle = tile.angle;
+            //double angle = tile.angle - T;
+            Path2D path = new Path2D.Double();
+            path.moveTo(tile.x, tile.y);//start path at xy
+
+            int ord = tile.type.ordinal();//A: 0 , B: 1, C: 2
+            if (ord == 0) {
+                if (Math.round(Math.sin(angle)) == 0) {
+                    double x1 = tile.x + Math.pow(G, 3) * tile.size * cos(angle);
+                    double y1 = tile.y;
+                    path.lineTo(x1, y1);
+
+                    double x2 = x1;
+                    double y2 = y1 - Math.pow(G, 2) * tile.size * sin(angle + PI / 2);
+                    path.lineTo(x2, y2);
+
+                    double x3 = x2 + Math.pow(G ,2) * tile.size * cos(angle + PI);
+                    double y3 = y2;
+                    path.lineTo(x3, y3);
+
+                    double x4 = x3;
+                    double y4 = y3 - tile.size * sin(angle + 3 * PI / 2);
+                    path.lineTo(x4, y4);
+
+                    double x5 = x4 + G * tile.size * cos(angle +  PI);
+                    double y5 = y4;
+                    path.lineTo(x5, y5);
+
+                    path.closePath();
+                }
+
+                else if (Math.round(Math.cos(angle)) == 0) {
+                    double x1 = tile.x;
+                    double y1 = tile.y - Math.pow(G, 3) * tile.size * sin(angle);
+                    path.lineTo(x1, y1);
+
+                    double x2 = x1 - Math.pow(G, 2) * tile.size * cos(angle + 3 * PI / 2);
+                    double y2 = y1;
+                    path.lineTo(x2, y2);
+
+                    double x3 = x2;
+                    double y3 = y2 - Math.pow(G ,2) * tile.size * sin(angle + PI);
+                    path.lineTo(x3, y3);
+
+                    double x4 = x3 + tile.size * cos(angle + 3 * PI / 2);
+                    double y4 = y3;
+                    path.lineTo(x4, y4);
+
+                    double x5 = x4 ;
+                    double y5 = y4 - G * tile.size * sin(angle + PI);
+                    path.lineTo(x5, y5);
+
+                    path.closePath();
+                }
+            }
+
+            else if (ord == 1){
+                if (Math.round(Math.sin(angle)) == 0) {
+                    double x1 = tile.x + 2 * Math.pow(G, 2) * tile.size * cos(angle);
+                    double y1 = tile.y;
+                    path.lineTo(x1, y1);
+
+                    double x2 = x1 ;
+                    double y2 = y1 - G * tile.size * sin(angle + PI / 2);
+                    path.lineTo(x2, y2);
+
+                    double x3 = x2 + tile.size * cos(angle + PI);
+                    double y3 = y2;
+                    path.lineTo(x3, y3);
+
+                    double x4 = x3;
+                    double y4 = y3 - Math.pow(G, 2)  * tile.size * sin(angle + PI / 2);
+                    path.lineTo(x4, y4);
+
+                    double x5 = x4 + G * tile.size * cos(angle + PI);
+                    double y5 = y4 ;
+                    path.lineTo(x5, y5);
+
+                    double x6 = x5;
+                    double y6 = y5 - G * tile.size * sin(angle + 3 * PI / 2);
+                    path.lineTo(x6, y6);
+
+                    double x7 = x6 + Math.pow(G, 2) * tile.size * cos(angle + PI);
+                    double y7 = y6;
+                    path.lineTo(x7, y7);
+
+                    path.closePath();
+                }
+
+                else if (Math.round(Math.cos(angle)) == 0) {
+                    double x1 = tile.x ;
+                    double y1 = tile.y - 2 * Math.pow(G, 2) * tile.size * sin(angle);
+                    path.lineTo(x1, y1);
+
+                    double x2 = x1 + G * tile.size * cos(angle + PI / 2);
+                    double y2 = y1;
+                    path.lineTo(x2, y2);
+
+                    double x3 = x2;
+                    double y3 = y2 - tile.size * sin(angle + PI);
+                    path.lineTo(x3, y3);
+
+                    double x4 = x3 + Math.pow(G, 2) * tile.size * cos(angle + PI / 2);
+                    double y4 = y3;
+                    path.lineTo(x4, y4);
+
+                    double x5 = x4;
+                    double y5 = y4 - G * tile.size * sin(angle + PI);
+                    path.lineTo(x5, y5);
+
+                    double x6 = x5 + G * tile.size * cos(angle + 3 * PI / 2);
+                    double y6 = y5;
+                    path.lineTo(x6, y6);
+
+                    double x7 = x6;
+                    double y7 = y6 - Math.pow(G, 2) * tile.size * sin(angle + PI);
+                    path.lineTo(x7, y7);
+
+                    path.closePath();
+                }
+            }
+
+            else if (ord == 2) {
+                if (Math.round(Math.sin(angle)) == 0) {
+                    double x1 = tile.x + (1 + Math.pow(G, 2)) * tile.size * cos(angle);
+                    double y1 = tile.y;
+                    path.lineTo(x1, y1);
+
+                    double x2 = x1;
+                    double y2 = y1 - G * tile.size * sin(angle + PI / 2);
+                    path.lineTo(x2, y2);
+
+                    double x3 = x2 + tile.size * cos(angle + PI);
+                    double y3 = y2;
+                    path.lineTo(x3, y3);
+
+                    double x4 = x3;
+                    double y4 = y3 - Math.pow(G, 2) * tile.size * sin(angle + PI / 2);
+                    path.lineTo(x4, y4);
+
+                    double x5 = x4 + G * tile.size * cos(angle + PI);
+                    double y5 = y4;
+                    path.lineTo(x5, y5);
+
+                    double x6 = x5;
+                    double y6 = y5 - G * tile.size * sin(angle + 3 * PI / 2);
+                    path.lineTo(x6, y6);
+
+                    double x7 = x6 + G * tile.size * cos(angle + PI);
+                    double y7 = y6;
+                    path.lineTo(x7, y7);
+
+                    double x8 = x7;
+                    double y8 = y7 - tile.size * sin(angle + 3 * PI / 2);
+                    path.lineTo(x8, y8);
+
+                    double x9 = x8 + (G - 1) * tile.size * cos(angle);
+                    double y9 = y8;
+                    path.lineTo(x9, y9);
+
+                    path.closePath();
+                }
+
+                else if (Math.round(Math.cos(angle)) == 0) {
+                    double x1 = tile.x;
+                    double y1 = tile.y - (1 + Math.pow(G, 2)) * tile.size * sin(angle);
+                    path.lineTo(x1, y1);
+
+                    double x2 = x1 + G * tile.size * cos(angle + PI / 2);
+                    double y2 = y1;
+                    path.lineTo(x2, y2);
+
+                    double x3 = x2;
+                    double y3 = y2 - tile.size * sin(angle + PI);
+                    path.lineTo(x3, y3);
+
+                    double x4 = x3 + Math.pow(G, 2) * tile.size * cos(angle + PI / 2);
+                    double y4 = y3;
+                    path.lineTo(x4, y4);
+
+                    double x5 = x4;
+                    double y5 = y4 - G * tile.size * sin(angle + PI);
+                    path.lineTo(x5, y5);
+
+                    double x6 = x5 + G * tile.size * cos(angle + 3 * PI /2);
+                    double y6 = y5;
+                    path.lineTo(x6, y6);
+
+                    double x7 = x6;
+                    double y7 = y6 - G * tile.size * sin(angle + PI);
+                    path.lineTo(x7, y7);
+
+                    double x8 = x7 + tile.size * cos(angle + 3 * PI / 2);
+                    double y8 = y7;
+                    path.lineTo(x8, y8);
+
+                    double x9 = x8;
+                    double y9 = y8 - (G - 1) * tile.size * sin(angle);
+                    path.lineTo(x9, y9);
+
+                    path.closePath();
+                }
+            }
+
+
+
+            double scale=0.0175;
+            if (ord == 0) {  //A
+                // create the transform, note that the transformations happen
+                // in reversed order (so check them backwards)
+                AffineTransform at = new AffineTransform();
+
+                // 4. translate it to the center of the component
+                at.translate(tile.x, tile.y);
+
+                // 3. do the actual rotation
+                at.rotate(-tile.angle);
+
+                // 2. just a scale because this image is big
+                at.scale(tile.size *scale, tile.size * scale);
+
+                // 1. translate the object so that you rotate it around the
+                at.translate(-BIA.getWidth() / 2, -BIA.getHeight() / 2);
+
+                g.drawImage(BIA, at, null);
+
+            } else if (ord == 1){  //B
+
+                AffineTransform at = new AffineTransform();
+                at.translate(tile.x, tile.y );
+                at.rotate(-tile.angle);
+                at.scale(tile.size * scale, tile.size * scale);
+                at.translate(-BIB.getWidth() / 2, -BIB.getHeight() / 2);
+
+                g.drawImage(BIB, at, null);
+
+            } else if (ord == 2){  //C
+
+                AffineTransform at = new AffineTransform();
+                at.translate(tile.x, tile.y);
+                at.rotate(-tile.angle);
+                at.scale(tile.size * scale, tile.size * scale);
+                at.translate(-BIC.getWidth() / 2, -BIC.getHeight() / 2);
+
+                g.drawImage(BIC, at, null);
+            }
+
+        }
+    }
+
+    @Override
+    public void paintComponent(Graphics og) {
+        super.paintComponent(og);
+        Graphics2D g = (Graphics2D) og;
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g.translate(500, 450); //change this number to move image around
+        g.scale(scale,scale); //change this number to change the size of the image
+        drawTiles(g);
+
+        //add extra blank space for drawing
+        Dimension d = new Dimension(1500, 1100);
+        setPreferredSize(d);
+    }
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> {
+            JFrame f = new JFrame();
+            f.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+            f.setTitle("A3 Ammann Tiling");
+            f.setResizable(true);
+
+            JScrollPane scrollPane = new JScrollPane(new test());
+            scrollPane.setPreferredSize(new Dimension(1200, 600));
+            scrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_ALWAYS);
+            scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
+            scrollPane.setColumnHeaderView(test.zoomPanel);
+
+            f.setLayout(new BorderLayout());
+            f.add(scrollPane, BorderLayout.CENTER);
+            f.pack();
+            f.setLocationRelativeTo(null);
+            f.setVisible(true);
+        });
+    }
+
+}
